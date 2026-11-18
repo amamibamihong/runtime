@@ -26,6 +26,7 @@
 | `chrome` | 精简 Chromium | Debian 13 | 2 / 2048 MB / 2 GB |
 | `code-interpreter` | 多版本 Python / Go / Java | Ubuntu 24.04 | 2 / 2048 MB / 9 GB |
 | `desktop` | X11 桌面 + VNC | Ubuntu 22.04 | 2 / 1024 MB / 1.6 GB |
+| `multica-desktop` | Multica 桌面客户端 + multica/claude/codex/opencode + noVNC | Debian 12 | 2 / 2048 MB / 23 GB |
 | `vscode` | code-server 远程 IDE | Debian 12 | 2 / 2048 MB / 1.8 GB |
 | `e2b-cli` | 内置 E2B CLI，可在沙箱内反向管理 E2B 资源 | Debian 12 (bookworm-slim) | 2 / 1024 MB / 22 GB |
 | `docker` | Docker 全家桶，沙箱内可跑容器 | Debian 12 (bookworm-slim) | 2 / 4096 MB / 22 GB |
@@ -113,6 +114,45 @@ node e2b_ctl.js exec -t code-interpreter \
 
 Ubuntu 22.04，Xvfb + x11vnc + websockify + noVNC。提供可远程连入的 X11 桌面。
 需要真实图形界面交互（点按钮、看渲染效果）时用它；纯 DOM 操作不需要。
+
+### `multica-desktop` — Multica 桌面 + 编码代理全家桶
+
+Debian 12，把 Multica 平台的三样东西装进同一个桌面沙箱：
+
+| 组件 | 说明 |
+|---|---|
+| `multica-desktop` | Multica 官方 Electron 桌面客户端（`/opt/Multica/multica-desktop`），开机自启 |
+| `multica` CLI | 0.11.17，管理 agent / issue / daemon |
+| `claude` / `codex` / `opencode` | 三个编码代理 CLI |
+| noVNC 桌面 | Xvfb + openbox + x11vnc + websockify(6080)，xterm 默认可见 |
+
+桌面由 `/usr/local/bin/start-desktop.sh` 这个 supervisor 拉起（systemd `Type=simple`
++ `Restart=always`，内部每 3 秒巡检各守护进程，崩了自动重拉）。
+
+**Token 登录**。桌面客户端不读进程环境变量，它认启动参数里的深链
+`multica://auth/callback?token=<token>`。模板预置了 `multica-login`（不含任何凭据），
+它把环境变量里的 token 落到 `/run/e2b-multica/token`，supervisor 随即带深链重启客户端：
+
+```bash
+# 创建沙箱时注入 token（-e 注入，别写进模板）
+node e2b_ctl.js create -t multica-desktop --timeout 3600 --dns 8.8.8.8 \
+  -e MULTICA_TOKEN=mul_xxx
+
+# 在这个沙箱里执行一次，桌面端自动登录
+node e2b_ctl.js exec -s <ID> -e MULTICA_TOKEN=mul_xxx 'multica-login'
+```
+
+想让沙箱开机即登录，就一次把两件事同时做：在 `create` 时带上 `-e MULTICA_TOKEN=...`，
+再 `exec` 一次 `multica-login`。`multica-login` 只读环境变量、不落任何明文到模板。
+
+CLI 侧不需要 `multica-login`：`multica` 二进制原生识别 `MULTICA_TOKEN` 环境变量，
+`-e MULTICA_TOKEN=... -e MULTICA_SERVER_URL=https://api.multica.ai` 之后
+`multica auth status` 直接显示已登录。
+
+访问桌面：
+```bash
+http://192.168.36.222:8080/sbx/<sandbox-id>:6080/vnc.html?autoconnect=1&resize=scale
+```
 
 ### `vscode` — 远程 IDE
 
