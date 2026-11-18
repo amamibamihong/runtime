@@ -1,0 +1,7 @@
+{
+  "api_url": "http://192.168.36.222:3000",
+  "sandbox_url": "http://192.168.36.222:3002",
+  "api_key": "e2b_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "default_template": "claudecode",
+  "default_timeout_seconds": 300
+}

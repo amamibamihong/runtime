@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "E2B Sandbox Skill Configuration",
+  "description": "Configuration schema for E2B microVM remote execution skill/plugin",
+  "type": "object",
+  "properties": {
+    "api_url": {
+      "type": "string",
+      "format": "uri",
+      "default": "http://192.168.36.222:3000",
+      "description": "E2B 控制面 REST API 地址（用于沙箱创建、状态查询、模板列表）"
+    },
+    "sandbox_url": {
+      "type": "string",
+      "format": "uri",
+      "default": "http://192.168.36.222:3002",
+      "description": "E2B 数据面网关代理地址（用于 gRPC 双向流、命令执行、文件上传下载）"
+    },
+    "api_key": {
+      "type": "string",
+      "description": "E2B 团队访问令牌（API Key），格式以 e2b_ 开头",
+      "secret": true
+    },
+    "default_template": {
+      "type": "string",
+      "default": "claudecode",
+      "description": "默认使用的微虚机沙箱模板别名（如 claudecode, trendy-browser, trendy-alpine 等）。不同用途可随时用 -t 临时指定，或用 config-set 持久化调整。"
+    },
+    "default_timeout_seconds": {
+      "type": "integer",
+      "default": 300,
+      "minimum": 10,
+      "maximum": 3600,
+      "description": "沙箱默认运行超时时间（秒），超时后自动释放微虚机资源"
+    },
+    "network": {
+      "type": "object",
+      "description": "沙箱出网规则，结构与官方 SDK 的 Sandbox.create({ network }) 完全一致，原样透传给服务端；不配置时整项不传，沿用控制面默认策略。字段：allowOut（放行，CIDR/IP/域名列表）、denyOut（拒绝列表，allowOut 优先于 denyOut）、dnsServers、rules（{ domain, transform } 列表）、egressProxy、allowPublicTraffic、maskRequestHost、httpsPorts。",
+      "additionalProperties": true,
+      "properties": {
+        "allowOut": {
+          "type": "array",
+          "items": { "type": "string" },
+          "examples": [["192.168.36.1/24"]],
+          "description": "允许出网的地址：CIDR、单个 IP 或域名"
+        },
+        "denyOut": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "禁止出网的地址：CIDR、单个 IP 或域名；与 allowOut 冲突时 allowOut 优先"
+        },
+        "dnsServers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "创建沙箱时放行到这些 DNS 服务器的流量（防火墙层面）。这不改沙箱的 /etc/resolv.conf，要改后者用顶层 dns_servers。"
+        },
+        "rules": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "按域名改写请求的规则列表，格式与 SDK 一致"
+        },
+        "egressProxy": {
+          "type": "object",
+          "description": "出网代理设置，格式与 SDK 一致"
+        },
+        "allowPublicTraffic": { "type": "boolean" },
+        "maskRequestHost": { "type": "string" },
+        "httpsPorts": {
+          "type": "array",
+          "items": { "type": "integer" }
+        }
+      }
+    },
+    "dns_servers": {
+      "type": ["string", "array"],
+      "items": { "type": "string" },
+      "description": "沙箱内 /etc/resolv.conf 的 nameserver 列表（字符串或字符串数组），每次创建沙箱后自动写入。与 network.dnsServers 是两件事：后者只决定防火墙放行哪个 DNS 的流量，不改 resolv.conf。",
+      "examples": [["192.168.36.222"], "192.168.36.222"]
+    }
+  },
+  "required": ["api_key"]
+}
