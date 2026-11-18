@@ -611,6 +611,24 @@ async function pause(sandboxId, { filesystemOnly = false, config } = {}) {
   return Sandbox.pause(sandboxId, opts);
 }
 
+/**
+ * 把运行中的沙箱就地固化成模板，不需要 Dockerfile 或重建。
+ * 快照的 snapshotId 可以直接当模板名传给 create -t。
+ */
+async function createSnapshot(sandboxId, { name, filesystemOnly = false, config } = {}) {
+  const cfg = (config || loadConfig()).applyToEnv();
+  const { Sandbox } = sdk();
+  // 只存磁盘时跳过内存导出；不传 name 则由服务端命名。
+  const opts = sdkOpts(cfg);
+  if (name) opts.name = name;
+  if (filesystemOnly) opts.mode = 'filesystem';
+  try {
+    return await Sandbox.createSnapshot(sandboxId, opts);
+  } catch (e) {
+    throw new TemplateError(e.message, { cause: e });
+  }
+}
+
 /** 恢复暂停的沙箱：SDK 没有独立 resume，connect 会唤醒并续租。 */
 async function resume(sandboxId, { lease, config } = {}) {
   return connect(sandboxId, { lease, config });
@@ -1370,6 +1388,7 @@ module.exports = {
   heartbeatInterval, LeaseMonitor, startMonitor, session, connectWithLease, connectPreserve, renew,
   // 生命周期
   create, connect, kill, pause, resume, getInfo, remainingLease, updateNetwork,
+  createSnapshot,
   applyDnsServers,
   listSandboxes, logs, metrics,
   // 持久卷

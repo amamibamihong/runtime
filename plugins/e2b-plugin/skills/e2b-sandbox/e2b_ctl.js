@@ -897,6 +897,31 @@ async function cmdResume(args) {
   return 0;
 }
 
+async function cmdSnapshot(args) {
+  let info;
+  try {
+    info = await api.createSnapshot(args.sandboxId, {
+      name: args.name,
+      filesystemOnly: args.fsOnly === true,
+    });
+  } catch (e) {
+    die(`failed to snapshot sandbox ${args.sandboxId}: ${e.message}`);
+  }
+  const payload = {
+    sandbox_id: args.sandboxId,
+    snapshot_id: info && info.snapshotId,
+    names: (info && info.names) || [],
+    mode: args.fsOnly === true ? 'filesystem' : 'full',
+  };
+  if (args.json) {
+    out(`${JSON.stringify(payload, null, 2)}\n`);
+  } else {
+    out(`Snapshot created: ${payload.snapshot_id}\n` +
+      `Create a sandbox from it with: create -t ${payload.snapshot_id}\n`);
+  }
+  return 0;
+}
+
 async function cmdInfo(args) {
   let info;
   try {
@@ -1071,6 +1096,7 @@ const USAGE = `Usage: e2b_ctl.js <command> [options]
   kill <sandbox_id>
   pause <sandbox_id> [--fs-only]
   resume <sandbox_id> [--timeout N]
+  snapshot <sandbox_id> [--name N] [--fs-only] [--json]
   info <sandbox_id>
   renew <sandbox_id> [--timeout N] [--json]
   logs <sandbox_id> [--start N] [--limit N] [--json]
@@ -1158,6 +1184,7 @@ const COMMANDS = {
   kill: cmdKill,
   pause: cmdPause,
   resume: cmdResume,
+  snapshot: cmdSnapshot,
   info: cmdInfo,
   renew: cmdRenew,
   logs: cmdLogs,
@@ -1285,6 +1312,7 @@ async function main() {
       break;
     case 'kill':
     case 'pause':
+    case 'snapshot':
     case 'info':
       requirePositional(args, 1, ['sandbox_id']);
       args.sandboxId = pos[0];

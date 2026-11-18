@@ -1,6 +1,6 @@
 ---
 name: e2b-sandbox
-description: E2B 微虚机与底层存储管控中心。负责沙箱实例生命周期管理（显式 create/kill/pause/resume/list）、出网网络规则配置、独立持久卷管理（Volume CRUD 与旁路文件直接读写）以及沙箱级单次命令/长任务 launch。当需要底层实例生命周期运维、批量管理沙箱或维护持久卷时调用此技能；若仅需日常执行命令请优先调用 e2b-linux。
+description: E2B 微虚机与底层存储管控中心。负责沙箱实例生命周期管理（显式 create/kill/pause/resume/snapshot/list）、出网网络规则配置、独立持久卷管理（Volume CRUD 与旁路文件直接读写）以及沙箱级单次命令/长任务 launch。当需要底层实例生命周期运维、批量管理沙箱或维护持久卷时调用此技能；若仅需日常执行命令请优先调用 e2b-linux。
 allowed-tools: bash
 ---
 
@@ -87,9 +87,17 @@ node <skill-dir>/e2b_ctl.js logs <SANDBOX_ID>
 node <skill-dir>/e2b_ctl.js pause <SANDBOX_ID>
 node <skill-dir>/e2b_ctl.js resume <SANDBOX_ID>
 
+# 把运行中的沙箱就地固化成模板（不需要 Dockerfile 或重新构建）
+node <skill-dir>/e2b_ctl.js snapshot <SANDBOX_ID> --name my-env --json
+# 之后可直接用它当模板：create -t local-dev-team/my-env:default
+
 # 销毁沙箱
 node <skill-dir>/e2b_ctl.js kill <SANDBOX_ID>
 ```
+
+搭建环境时**不要每改一步就重建沙箱或重跑 `build-template`**：在一个沙箱里连续做，
+阶段性验证通过就 `snapshot` 留个版本，全部通过后再打最终快照当成品模板。
+详见 USAGE.md 4.6。
 
 ### 纯离线后台任务派发 (`launch`)
 用于启动后完全不关心过程与响应、预计运行一定时间后随沙箱自然回收的离线任务：

@@ -235,6 +235,56 @@ node <skill-dir>/e2b_ctl.js build-template my-env --from-template e2b-cli \
 要更大的盘，选一个本身就大的基础模板（`e2b-cli` 22 GB、`codex` 22 GB、`claudecode`
 23 GB），或者在自己的部署里打开上面那个服务端开关。磁盘只会长不会缩。
 
+### 4.6 装环境：在一个沙箱里迭代，别反复重建
+
+`build-template --run-cmd` 适合**已经写死的一串命令**。但探索阶段（装哪个包、路径对不对、
+服务起不起来）没人能一次写对，这时候反复 `build-template` 或反复 `create` 都是浪费：
+每次都要等一轮构建/启动，还得重新回到刚才那一步。
+
+正确做法是**一个沙箱走到底**：
+
+```bash
+# 1. 建一个工作沙箱，租期给够（续租靠每次连上自动延长）
+node <skill-dir>/e2b_ctl.js create -t base --timeout 3600 --dns 8.8.8.8
+
+# 2. 阶段验证：每一步都在同一个沙箱里做
+node <skill-dir>/e2b_ctl.js exec -s <ID> -- 'sudo apt-get update && sudo apt-get install -y x11vnc'
+node <skill-dir>/e2b_ctl.js exec -s <ID> -- 'pgrep -x x11vnc || (x11vnc --version >/dev/null)'
+```
+
+某一段验证通过了，而你要离开一会儿或做别的实验，先**打快照**保存现场：
+
+```bash
+node <skill-dir>/e2b_ctl.js snapshot <ID> --name my-env-step2
+# → Snapshot created: local-dev-team/my-env-step2:default
+```
+
+快照是一个**独立的模板**，直接能当模板名用：
+
+```bash
+node <skill-dir>/e2b_ctl.js create -t local-dev-team/my-env-step2
+```
+
+全部步骤都通过后，对最终那个沙箱再打一次快照，就是成品模板：
+
+```bash
+node <skill-dir>/e2b_ctl.js snapshot <ID> --name my-env --json
+```
+
+几点说明：
+
+- 快照**期间源沙箱会被暂停**，打完自动恢复，不用手动 resume。
+- 不给 `--name` 时由服务端命名，返回里看 `snapshot_id`。
+- 同名快照再次打，会给**同一个模板**追加新版本，不新建模板。
+- **`--fs-only` 在本集群用不了**：服务端报 `Snapshots without memory (memory: false)
+  are not enabled for this team`。全量快照（带内存）才通。
+- 全量快照的体积约等于客户机常驻内存，尽量在装的包稳定后再打，别每改一行就打一次。
+- 快照和 `build-template` 产物在同一个模板命名空间里，用 `list-templates` 都能看到，
+  用 `delete-template` 都能删。
+
+**对比 `build-template --run-cmd`**：那条路可复现、可重放，适合已经稳定的步骤；
+这条路适合探索和搭环境。搭好了再把最终命令序列整理成 `--run-cmd` 固化，两件事不冲突。
+
 ---
 
 ## 5. 出网
@@ -567,3 +617,31 @@ node <skill-dir>/e2b_ctl.js resume <ID> --timeout 1800
 给 `--timeout` 留足余量。
 
 **想看详细堆栈**：`E2B_DEBUG=1 node ...`。
+
+---
+
+## 10. 从浏览器访问沙箱内的服务
+
+集群在 `192.168.36.222:8080` 上有一个反向代理，按 **path 前缀** 分发，
+不需要配 Host 头、也不需要在本地自己搭代理：
+
+```
+http://192.168.36.222:8080/sbx/<sandbox-id>:<port>/<path>
+```
+
+例如沙箱 `abc123` 里跑了 6080 端口的 noVNC：
+
+```
+http://192.168.36.222:8080/sbx/abc123:6080/vnc.html
+```
+
+代理会把 `/sbx/` 后面解析成沙箱 ID 和端口，去掉前缀后转发到对应沙箱。
+端口省略时用默认端口。
+
+另外，访问根路径 `http://192.168.36.222:8080/` 会弹出一个输入框，
+填一次沙箱 ID 后写进 cookie，之后的请求都按 cookie 里的 ID 分发——
+适合那些不认路径前缀的站点。
+
+noVNC 有个额外细节：它的 JS 会把 WebSocket 地址拼成绝对路径，路径前缀模式下
+会丢掉 `/sbx/<id>:<port>` 前缀。代理已经自动补 `?path=` 参数处理这件事，
+直接用上面的 URL 即可。
